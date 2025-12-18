@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Space Defender - Easy HTML5 Game</title>
+    <title>Space Defender - Enhanced HTML5 Game</title>
     <style>
         * {
             margin: 0;
@@ -175,6 +175,7 @@
         <div class="infoBox">Score: <span id="score">0</span></div>
         <div class="infoBox">Lives: <span id="lives">3</span></div>
         <div class="infoBox">Level: <span id="level">1</span></div>
+        <div class="infoBox">Weapon: <span id="weapon">Standard</span></div>
     </div>
     
     <div id="gameContainer">
@@ -201,6 +202,29 @@
                 </div>
             </div>
             
+            <div style="margin-top: 20px; background-color: rgba(0,50,50,0.7); padding: 15px; border-radius: 5px; border: 1px solid #00aaaa; width: 90%;">
+                <h3 style="color: #00ffff; margin-bottom: 10px; text-align: center;">WEAPON SYSTEM</h3>
+                <div style="display: flex; justify-content: space-around; text-align: center;">
+                    <div>
+                        <div style="color: #ffff00; font-weight: bold;">Standard Gun</div>
+                        <div style="font-size: 14px;">Single shot</div>
+                        <div style="font-size: 12px; color: #88ff88;">(Press 1)</div>
+                    </div>
+                    <div>
+                        <div style="color: #00ffff; font-weight: bold;">Spread Gun</div>
+                        <div style="font-size: 14px;">Triple shot</div>
+                        <div style="font-size: 12px; color: #88ff88;">Unlocks at 100 pts</div>
+                        <div style="font-size: 12px; color: #88ff88;">(Press 2)</div>
+                    </div>
+                    <div>
+                        <div style="color: #ff00ff; font-weight: bold;">Rapid Fire</div>
+                        <div style="font-size: 14px;">Fast shooting</div>
+                        <div style="font-size: 12px; color: #88ff88;">Unlocks at 250 pts</div>
+                        <div style="font-size: 12px; color: #88ff88;">(Press 3)</div>
+                    </div>
+                </div>
+            </div>
+            
             <button id="startButton">START GAME</button>
         </div>
         
@@ -213,7 +237,7 @@
     </div>
     
     <footer>
-        Use LEFT/RIGHT arrow keys to move and SPACEBAR to shoot. Destroy asteroids to score points!
+        Use LEFT/RIGHT arrow keys to move, SPACEBAR to shoot. Press 1, 2, 3 to switch weapons!
     </footer>
 
     <script>
@@ -228,6 +252,36 @@
         let level = 1;
         let gameOver = false;
         
+        // Weapon system
+        let currentWeapon = 0; // 0: Standard, 1: Spread, 2: Rapid
+        let weaponCooldown = 0;
+        const weapons = [
+            { 
+                name: "Standard", 
+                fireRate: 20, 
+                bulletSpeed: 8, 
+                color: '#ffff00', 
+                unlocked: true,
+                playerColor: '#00ff00'
+            },
+            { 
+                name: "Spread", 
+                fireRate: 30, 
+                bulletSpeed: 7, 
+                color: '#00ffff', 
+                unlocked: false,
+                playerColor: '#00aaff'
+            },
+            { 
+                name: "Rapid", 
+                fireRate: 8, 
+                bulletSpeed: 9, 
+                color: '#ff00ff', 
+                unlocked: false,
+                playerColor: '#ff00ff'
+            }
+        ];
+        
         // Player ship
         const player = {
             x: canvas.width / 2 - 25,
@@ -240,7 +294,6 @@
         
         // Bullets array
         const bullets = [];
-        const bulletSpeed = 8;
         const bulletWidth = 4;
         const bulletHeight = 15;
         
@@ -261,6 +314,7 @@
         const scoreElement = document.getElementById('score');
         const livesElement = document.getElementById('lives');
         const levelElement = document.getElementById('level');
+        const weaponElement = document.getElementById('weapon');
         const startScreen = document.getElementById('startScreen');
         const gameOverScreen = document.getElementById('gameOverScreen');
         const finalScoreElement = document.getElementById('finalScore');
@@ -273,6 +327,12 @@
                 keys[e.key] = true;
                 // Prevent spacebar from scrolling the page
                 if (e.key === ' ') e.preventDefault();
+            }
+            
+            // Weapon switching keys
+            if (e.key >= '1' && e.key <= '3') {
+                const weaponIndex = parseInt(e.key) - 1;
+                switchWeapon(weaponIndex);
             }
         });
         
@@ -297,6 +357,14 @@
             asteroidSpeed = 2;
             asteroidSpawnRate = 60;
             
+            // Reset weapon system
+            currentWeapon = 0;
+            weaponCooldown = 0;
+            weapons[0].unlocked = true;
+            weapons[1].unlocked = false;
+            weapons[2].unlocked = false;
+            player.color = weapons[0].playerColor;
+            
             // Clear arrays
             bullets.length = 0;
             asteroids.length = 0;
@@ -320,6 +388,7 @@
             scoreElement.textContent = score;
             livesElement.textContent = lives;
             levelElement.textContent = level;
+            weaponElement.textContent = weapons[currentWeapon].name;
         }
         
         // Draw player ship
@@ -337,13 +406,35 @@
             // Draw ship details
             ctx.fillStyle = '#00aa00';
             ctx.fillRect(player.x + player.width/2 - 5, player.y + 10, 10, 10);
+            
+            // Draw weapon indicator
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x + player.width/2 - 1, player.y + 25, 2, 10);
         }
         
         // Draw bullets
         function drawBullets() {
-            ctx.fillStyle = '#ffff00';
             for (let bullet of bullets) {
-                ctx.fillRect(bullet.x, bullet.y, bulletWidth, bulletHeight);
+                ctx.fillStyle = bullet.color || '#ffff00';
+                
+                // Handle angled bullets (for spread weapon)
+                if (bullet.angle !== undefined) {
+                    ctx.save();
+                    ctx.translate(bullet.x + bullet.width/2, bullet.y + bullet.height/2);
+                    ctx.rotate(bullet.angle);
+                    ctx.fillRect(-bullet.width/2, -bullet.height/2, bullet.width, bullet.height);
+                    ctx.restore();
+                } else {
+                    ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+                }
+                
+                // Add glow effect for special weapons
+                if (bullet.color === '#00ffff' || bullet.color === '#ff00ff') {
+                    ctx.shadowColor = bullet.color;
+                    ctx.shadowBlur = 10;
+                    ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+                    ctx.shadowBlur = 0;
+                }
             }
         }
         
@@ -363,14 +454,144 @@
             }
         }
         
-        // Create a new bullet
+        // Create bullets based on current weapon
         function shoot() {
-            bullets.push({
-                x: player.x + player.width/2 - bulletWidth/2,
-                y: player.y,
-                width: bulletWidth,
-                height: bulletHeight
-            });
+            if (weaponCooldown > 0) return;
+            
+            const weapon = weapons[currentWeapon];
+            
+            if (currentWeapon === 0) {
+                // Standard single shot weapon
+                bullets.push({
+                    x: player.x + player.width/2 - bulletWidth/2,
+                    y: player.y,
+                    width: bulletWidth,
+                    height: bulletHeight,
+                    color: weapon.color,
+                    speed: weapon.bulletSpeed
+                });
+            } 
+            else if (currentWeapon === 1) {
+                // Spread weapon - three shots
+                for (let i = -1; i <= 1; i++) {
+                    bullets.push({
+                        x: player.x + player.width/2 - bulletWidth/2 + i * 10,
+                        y: player.y,
+                        width: bulletWidth,
+                        height: bulletHeight,
+                        color: weapon.color,
+                        speed: weapon.bulletSpeed,
+                        angle: i * 0.1 // slight angle offset for spread effect
+                    });
+                }
+            } 
+            else if (currentWeapon === 2) {
+                // Rapid fire weapon
+                bullets.push({
+                    x: player.x + player.width/2 - bulletWidth/2,
+                    y: player.y,
+                    width: bulletWidth,
+                    height: bulletHeight,
+                    color: weapon.color,
+                    speed: weapon.bulletSpeed
+                });
+            }
+            
+            weaponCooldown = weapon.fireRate;
+        }
+        
+        // Switch weapon
+        function switchWeapon(weaponIndex) {
+            if (weaponIndex < 0 || weaponIndex > 2) return;
+            
+            if (weapons[weaponIndex].unlocked) {
+                currentWeapon = weaponIndex;
+                player.color = weapons[weaponIndex].playerColor;
+                updateUI();
+                
+                // Visual feedback
+                showWeaponSwitchFeedback(weapons[weaponIndex].name);
+            }
+        }
+        
+        // Show weapon switch feedback
+        function showWeaponSwitchFeedback(weaponName) {
+            const feedback = document.createElement('div');
+            feedback.textContent = `Weapon: ${weaponName}`;
+            feedback.style.cssText = `
+                position: absolute;
+                top: 20%;
+                left: 50%;
+                transform: translateX(-50%);
+                background-color: rgba(0, 0, 0, 0.7);
+                color: ${weapons[currentWeapon].color};
+                padding: 5px 15px;
+                border-radius: 5px;
+                font-size: 18px;
+                z-index: 50;
+                border: 1px solid ${weapons[currentWeapon].color};
+                animation: fadeWeaponFeedback 1.5s forwards;
+            `;
+            
+            // Add animation
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes fadeWeaponFeedback {
+                    0% { opacity: 1; top: 20%; }
+                    70% { opacity: 1; top: 22%; }
+                    100% { opacity: 0; top: 22%; }
+                }
+            `;
+            document.head.appendChild(style);
+            
+            document.getElementById('gameContainer').appendChild(feedback);
+            
+            setTimeout(() => {
+                if (feedback.parentNode) {
+                    feedback.parentNode.removeChild(feedback);
+                }
+            }, 1500);
+        }
+        
+        // Show weapon unlock message
+        function showWeaponUnlockMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = message;
+            messageDiv.style.cssText = `
+                position: absolute;
+                top: 40%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background-color: rgba(0, 50, 100, 0.9);
+                color: white;
+                padding: 15px 30px;
+                border-radius: 10px;
+                font-size: 24px;
+                z-index: 100;
+                border: 2px solid #00aaff;
+                animation: fadeOut 3s forwards;
+                text-align: center;
+                max-width: 80%;
+            `;
+            
+            // Add fade out animation
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes fadeOut {
+                    0% { opacity: 1; }
+                    70% { opacity: 1; }
+                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+                }
+            `;
+            document.head.appendChild(style);
+            
+            document.getElementById('gameContainer').appendChild(messageDiv);
+            
+            setTimeout(() => {
+                if (messageDiv.parentNode) {
+                    messageDiv.parentNode.removeChild(messageDiv);
+                }
+            }, 3000);
         }
         
         // Create a new asteroid
@@ -410,10 +631,20 @@
         // Update bullets
         function updateBullets() {
             for (let i = bullets.length - 1; i >= 0; i--) {
-                bullets[i].y -= bulletSpeed;
+                const bullet = bullets[i];
+                
+                // Apply angle for spread bullets
+                if (bullet.angle !== undefined) {
+                    bullet.x += Math.sin(bullet.angle) * 3;
+                    bullet.y -= bullet.speed;
+                } else {
+                    bullet.y -= bullet.speed;
+                }
                 
                 // Remove bullets that go off screen
-                if (bullets[i].y + bullets[i].height < 0) {
+                if (bullet.y + bullet.height < 0 || 
+                    bullet.x < 0 || 
+                    bullet.x > canvas.width) {
                     bullets.splice(i, 1);
                 }
             }
@@ -467,6 +698,19 @@
                         if (score % 100 === 0) {
                             level++;
                             asteroidSpeed += 0.5;
+                            
+                            // Show level up message
+                            showWeaponUnlockMessage(`LEVEL ${level}!`);
+                        }
+                        
+                        // Weapon unlock logic
+                        if (score >= 100 && !weapons[1].unlocked) {
+                            weapons[1].unlocked = true;
+                            showWeaponUnlockMessage("SPREAD GUN UNLOCKED! Press 2 to use");
+                        }
+                        if (score >= 250 && !weapons[2].unlocked) {
+                            weapons[2].unlocked = true;
+                            showWeaponUnlockMessage("RAPID FIRE UNLOCKED! Press 3 to use");
                         }
                         
                         updateUI();
@@ -489,6 +733,12 @@
                     asteroids.splice(i, 1);
                     lives--;
                     updateUI();
+                    
+                    // Visual feedback for hit
+                    player.color = '#ff0000';
+                    setTimeout(() => {
+                        player.color = weapons[currentWeapon].playerColor;
+                    }, 200);
                     
                     if (lives <= 0) {
                         gameOver = true;
@@ -513,11 +763,28 @@
                 
                 ctx.fillRect(x, y, size, size);
             }
+            
+            // Draw nebula effect
+            ctx.fillStyle = 'rgba(0, 50, 100, 0.1)';
+            for (let i = 0; i < 5; i++) {
+                const x = (i * 150) % canvas.width;
+                const y = (i * 100) % canvas.height;
+                const radius = 50 + i * 20;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
         
         // Game loop
         function gameLoop() {
             if (!gameRunning) return;
+            
+            // Update weapon cooldown
+            if (weaponCooldown > 0) {
+                weaponCooldown--;
+            }
             
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -559,7 +826,32 @@
             // Add some example bullets
             ctx.fillStyle = '#ffff00';
             ctx.fillRect(x - 2, y - 40, 4, 15);
+            
+            // Show different weapon bullets
+            if (i === 1) {
+                ctx.fillStyle = '#00ffff';
+                ctx.fillRect(x - 2, y - 60, 4, 15);
+                ctx.fillRect(x - 12, y - 60, 4, 15);
+                ctx.fillRect(x + 8, y - 60, 4, 15);
+            }
+            if (i === 3) {
+                ctx.fillStyle = '#ff00ff';
+                ctx.fillRect(x - 2, y - 60, 4, 15);
+                ctx.fillRect(x - 2, y - 80, 4, 15);
+                ctx.fillRect(x - 2, y - 100, 4, 15);
+            }
         }
+        
+        // Add weapon examples text on start screen
+        ctx.fillStyle = '#ffff00';
+        ctx.font = '16px Arial';
+        ctx.fillText('Standard', 140, 250);
+        
+        ctx.fillStyle = '#00ffff';
+        ctx.fillText('Spread', 340, 250);
+        
+        ctx.fillStyle = '#ff00ff';
+        ctx.fillText('Rapid', 540, 250);
     </script>
 </body>
 </html>
